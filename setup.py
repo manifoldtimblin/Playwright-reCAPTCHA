@@ -18,8 +18,8 @@ setup(
     install_requires=[
         "playwright>=1.33.0,!=1.50.0",
         "pydub==0.25.1",
-        "SpeechRecognition==3.14.3",
         "tenacity==9.1.2",
+        "faster-whisper==1.2.1"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

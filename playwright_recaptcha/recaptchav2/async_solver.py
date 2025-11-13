@@ -12,7 +12,6 @@ from json import JSONDecodeError
 from typing import Any, BinaryIO, Dict, List, Optional, Union
 from urllib.parse import parse_qs, urlparse
 
-import speech_recognition
 from playwright.async_api import Locator, Page, Response
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
@@ -22,6 +21,7 @@ from tenacity import (
     stop_after_delay,
     wait_fixed,
 )
+from faster_whisper import WhisperModel
 
 from ..errors import (
     CapSolverError,
@@ -32,36 +32,6 @@ from ..errors import (
 from .base_solver import BaseSolver
 from .recaptcha_box import AsyncRecaptchaBox
 from .translations import OBJECT_TRANSLATIONS, ORIGINAL_LANGUAGE_AUDIO
-
-
-class AsyncAudioFile(speech_recognition.AudioFile):
-    """
-    A subclass of `speech_recognition.AudioFile` that can be used asynchronously.
-
-    Parameters
-    ----------
-    file : Union[BinaryIO, str]
-        The audio file handle or file path.
-    executor : Optional[ThreadPoolExecutor], optional
-        The thread pool executor to use, by default None.
-    """
-
-    def __init__(
-        self,
-        file: Union[BinaryIO, str],
-        *,
-        executor: Optional[ThreadPoolExecutor] = None,
-    ) -> None:
-        super().__init__(file)
-        self._loop = asyncio.get_event_loop()
-        self._executor = executor
-
-    async def __aenter__(self) -> AsyncAudioFile:
-        await self._loop.run_in_executor(self._executor, self.__enter__)
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        await self._loop.run_in_executor(self._executor, self.__exit__, *args)
 
 
 class AsyncSolver(BaseSolver[Page]):
@@ -292,33 +262,27 @@ class AsyncSolver(BaseSolver[Page]):
         loop = asyncio.get_event_loop()
         response = await self._page.request.get(audio_url)
 
-        wav_audio = BytesIO()
         mp3_audio = BytesIO(await response.body())
 
-        try:
-            audio: AudioSegment = await loop.run_in_executor(
-                None, AudioSegment.from_mp3, mp3_audio
-            )
-        except CouldntDecodeError:
-            return None
-
-        await loop.run_in_executor(
-            None, functools.partial(audio.export, wav_audio, format="wav")
-        )
-
-        recognizer = speech_recognition.Recognizer()
-
-        async with AsyncAudioFile(wav_audio) as source:
-            audio_data = await loop.run_in_executor(None, recognizer.record, source)
+        def _whisper_transcribe(audio_buf: BytesIO):
+            model = WhisperModel("small", device="cpu", compute_type="int8")
+            return model.transcribe(audio_buf)
 
         try:
-            return await loop.run_in_executor(
+            segments, _ = await loop.run_in_executor(
                 None,
-                functools.partial(
-                    recognizer.recognize_google, audio_data, language=language
-                ),
+                _whisper_transcribe,
+                mp3_audio,
             )
-        except speech_recognition.UnknownValueError:
+            text = ""
+            for segment in segments:
+                text += segment.text + " "
+
+            text = re.sub(r"\s+", " ", text).strip()  # Remove extra spaces
+            text = text.lower()  # Make text lowercase
+            text = re.sub(r"[^a-z0-9\- ]", "", text)  # Remove non-alphanumeric characters (except hyphens)
+            return text
+        except:
             return None
 
     async def _click_checkbox(self, recaptcha_box: AsyncRecaptchaBox) -> None:

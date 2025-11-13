@@ -9,11 +9,11 @@ from json import JSONDecodeError
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-import speech_recognition
 from playwright.sync_api import Locator, Page, Response
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 from tenacity import Retrying, retry_if_exception_type, stop_after_delay, wait_fixed
+from faster_whisper import WhisperModel
 
 from ..errors import (
     CapSolverError,
@@ -249,23 +249,21 @@ class SyncSolver(BaseSolver[Page]):
         """
         response = self._page.request.get(audio_url)
 
-        wav_audio = BytesIO()
         mp3_audio = BytesIO(response.body())
 
-        try:
-            audio: AudioSegment = AudioSegment.from_mp3(mp3_audio)
-        except CouldntDecodeError:
-            return None
-
-        audio.export(wav_audio, format="wav")
-        recognizer = speech_recognition.Recognizer()
-
-        with speech_recognition.AudioFile(wav_audio) as source:
-            audio_data = recognizer.record(source)
+        model = WhisperModel("small", device="cpu", compute_type="int8")
 
         try:
-            return recognizer.recognize_google(audio_data, language=language)
-        except speech_recognition.UnknownValueError:
+            segments, _ = model.transcribe(mp3_audio)
+            text = ''
+            for segment in segments:
+                text += segment.text + ' '
+
+            text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
+            text = text.lower()  # Make text lowercase
+            text = re.sub(r'[^a-z0-9\- ]', '', text)  # Remove non-alphanumeric characters (except hyphens)
+            return text
+        except:
             return None
 
     def _click_checkbox(self, recaptcha_box: SyncRecaptchaBox) -> None:
