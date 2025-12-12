@@ -271,7 +271,7 @@ class AsyncSolver(BaseSolver[Page]):
                 await tile.evaluate(style_script)
 
     async def _transcribe_audio(
-        self, audio_url: str, *, language: str = "en-US"
+        self, audio_url: str, *, language: str = "en-US", credentials_json_path: str | None = None
     ) -> Optional[str]:
         """
         Transcribe the reCAPTCHA audio challenge.
@@ -312,12 +312,20 @@ class AsyncSolver(BaseSolver[Page]):
             audio_data = await loop.run_in_executor(None, recognizer.record, source)
 
         try:
-            return await loop.run_in_executor(
-                None,
-                functools.partial(
-                    recognizer.recognize_google, audio_data, language=language
-                ),
-            )
+            if credentials_json_path is None:
+                return await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        recognizer.recognize_google, audio_data, language=language
+                    ),
+                )
+            else:
+                return await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        recognizer.recognize_google_cloud, audio_data, language=language, credentials_json_path=credentials_json_path
+                    ),
+                )
         except speech_recognition.UnknownValueError:
             return None
 
@@ -512,7 +520,7 @@ class AsyncSolver(BaseSolver[Page]):
             ):
                 await button.click()
 
-    async def _solve_audio_challenge(self, recaptcha_box: AsyncRecaptchaBox) -> None:
+    async def _solve_audio_challenge(self, recaptcha_box: AsyncRecaptchaBox, credentials_json_path: str | None = None) -> None:
         """
         Solve the reCAPTCHA audio challenge.
 
@@ -575,6 +583,7 @@ class AsyncSolver(BaseSolver[Page]):
         wait: bool = False,
         wait_timeout: float = 30,
         image_challenge: bool = False,
+        credentials_json_path: str | None = None,
     ) -> str:
         """
         Solve the reCAPTCHA and return the `g-recaptcha-response` token.
@@ -675,7 +684,7 @@ class AsyncSolver(BaseSolver[Page]):
             if image_challenge:
                 await self._solve_image_challenge(recaptcha_box)
             else:
-                await self._solve_audio_challenge(recaptcha_box)
+                await self._solve_audio_challenge(recaptcha_box, credentials_json_path)
 
             if (
                 recaptcha_box.frames_are_detached()

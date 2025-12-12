@@ -229,7 +229,7 @@ class SyncSolver(BaseSolver[Page]):
                 tile.evaluate(style_script)
 
     def _transcribe_audio(
-        self, audio_url: str, *, language: str = "en-US"
+        self, audio_url: str, *, language: str = "en-US", credentials_json_path: str | None = None
     ) -> Optional[str]:
         """
         Transcribe the reCAPTCHA audio challenge.
@@ -264,7 +264,10 @@ class SyncSolver(BaseSolver[Page]):
             audio_data = recognizer.record(source)
 
         try:
-            return recognizer.recognize_google(audio_data, language=language)
+            if credentials_json_path is None:
+                return recognizer.recognize_google(audio_data, language=language)
+            else:
+                return recognizer.recognize_google_cloud(audio_data, language=language, credentials_json_path=credentials_json_path)
         except speech_recognition.UnknownValueError:
             return None
 
@@ -450,7 +453,7 @@ class SyncSolver(BaseSolver[Page]):
             ):
                 button.click()
 
-    def _solve_audio_challenge(self, recaptcha_box: SyncRecaptchaBox) -> None:
+    def _solve_audio_challenge(self, recaptcha_box: SyncRecaptchaBox, credentials_json_path: str | None = None) -> None:
         """
         Solve the reCAPTCHA audio challenge.
 
@@ -473,7 +476,7 @@ class SyncSolver(BaseSolver[Page]):
 
         while True:
             url = self._get_audio_url(recaptcha_box)
-            text = self._transcribe_audio(url, language=language)
+            text = self._transcribe_audio(url, language=language, credentials_json_path=credentials_json_path)
 
             if text is not None:
                 break
@@ -511,6 +514,7 @@ class SyncSolver(BaseSolver[Page]):
         wait: bool = False,
         wait_timeout: float = 30,
         image_challenge: bool = False,
+        credentials_json_path: str | None = None
     ) -> str:
         """
         Solve the reCAPTCHA and return the `g-recaptcha-response` token.
@@ -608,7 +612,7 @@ class SyncSolver(BaseSolver[Page]):
             if image_challenge:
                 self._solve_image_challenge(recaptcha_box)
             else:
-                self._solve_audio_challenge(recaptcha_box)
+                self._solve_audio_challenge(recaptcha_box, credentials_json_path)
 
             if (
                 recaptcha_box.frames_are_detached()
