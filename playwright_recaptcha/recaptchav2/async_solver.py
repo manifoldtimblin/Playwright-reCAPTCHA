@@ -543,7 +543,7 @@ class AsyncSolver(BaseSolver[Page]):
 
         while True:
             url = await self._get_audio_url(recaptcha_box)
-            text = await self._transcribe_audio(url, language=language)
+            text = await self._transcribe_audio(url, language=language, credentials_json_path=credentials_json_path)
 
             if text is not None:
                 break
