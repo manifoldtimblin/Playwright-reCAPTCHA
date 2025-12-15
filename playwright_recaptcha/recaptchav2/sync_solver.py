@@ -267,7 +267,7 @@ class SyncSolver(BaseSolver[Page]):
             if credentials_json_path is None:
                 return recognizer.recognize_google(audio_data, language=language)
             else:
-                return recognizer.recognize_google_cloud(audio_data, language=language, credentials_json_path=credentials_json_path)
+                return recognizer.recognize_google_cloud(audio_data, credentials_json_path=credentials_json_path)
         except speech_recognition.UnknownValueError:
             return None
 
