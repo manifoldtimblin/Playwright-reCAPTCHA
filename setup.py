@@ -20,6 +20,8 @@ setup(
         "pydub==0.25.1",
         "SpeechRecognition==3.14.4",
         "tenacity==9.1.2",
+        "google-api-core==2.28.1",
+        "google-cloud-speech==2.34.0",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
